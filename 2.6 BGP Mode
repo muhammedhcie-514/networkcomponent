@@ -1,0 +1,100 @@
+Step 1 Change the mode.
+Modify pool1.yaml in step 3 in section 2.3 to the following content in bold:
+apiVersion: projectcalico.org/v3
+kind: IPPool
+metadata:
+ name: pool1
+spec:
+ cidr: 11.0.0.0/8
+ ipipMode: CrossSubnet
+ natOutgoing: true
+ nodeSelector: all()
+Run the calicoctl apply -f /root/network/pool1.yaml command to make the
+configuration take effect.
+
+
+Step 2 Check the modification.
+Run the ip route list command and check the corresponding route as follows:
+ip route list
+
+The preceding output indicates that the next-hop interface of the route related to pool1
+becomes the physical interface of the node, not tunl0.
+
+
+Step 3 Capture packets to check the data forwarding path.
+On the master node, ping the pod in the 11.0.0.0/24 network segment and capture
+packets on the node according to step 2 in section 2.2. The following traffic is obtained:
+[root@node01 ~]# tcpdump -i ens192 -nn ip host 11.224.169.192
+dropped privs to tcpdump
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+14:23:45.578527 IP 192.168.1.11 > 11.224.169.192: ICMP echo request, id 5031, seq 10, length 64
+14:23:45.578595 IP 11.224.169.192 > 192.168.1.11: ICMP echo reply, id 5031, seq 10, length 64
+14:23:46.602534 IP 192.168.1.11 > 11.224.169.192: ICMP echo request, id 5031, seq 11, length 64
+14:23:46.602608 IP 11.224.169.192 > 192.168.1.11: ICMP echo reply, id 5031, seq 11, length 64
+14:23:47.626564 IP 192.168.1.11 > 11.224.169.192: ICMP echo request, id 5031, seq 12, length 64
+14:23:47.626639 IP 11.224.169.192 > 192.168.1.11: ICMP echo reply, id 5031, seq 12, length 64
+The data does not need to be encapsulated and can be directly forwarded.
+
+
+Step 4 Deploy a route reflector (RR).
+Compile the following YAML file for deploying an RR:
+apiVersion: projectcalico.org/v3
+kind: Node
+metadata:
+ labels:
+ route-reflector: true
+ name: k8smaster1
+spec:
+ bgp:
+ ipv4Address: 192.168.1.11/24
+ ipv4IPIPTunnelAddr: 10.239.112.128
+ routeReflectorClusterID: 1.1.1.1
+Run the calico apply -f rr.yaml command to deploy the RR.
+
+Step 5 Change the mode of all nodes.
+Compile the following YAML file for changing the mode of all nodes:
+kind: BGPPeer
+apiVersion: projectcalico.org/v3
+metadata:
+ name: bgppeer
+spec:
+ nodeSelector: all()
+ peerSelector: route-reflector=="true"
+Run the calico apply -f peer.yaml command to make the configuration take effect.
+
+
+Step 6 Check the node status after deployment.
+Check the status of all nodes on the RR node. The details are as follows:
+The command output shows that PEER TYPE has been changed from node-to-node
+mesh to node specific, indicating that the mode has been changed to RR.
+Run the same command on non-RR nodes. The details are as follows:
+The command output shows that the local node has established a peer relationship with
+the RR node in RR mode, but the local node still learns routes from other nodes in nodeto-node mesh mode
+
+
+Step 7 Disable the default mode.
+Compile the following YAML file:
+apiVersion: projectcalico.org/v3
+kind: BGPConfiguration
+metadata:
+ name: default
+spec:
+ logSeverityScreen: Info
+ nodeToNodeMeshEnabled: false
+ asNumber: 63400
+
+Run the calicoctl apply -f no-default.yaml command to make the configuration take
+effect. Then, check the node status on non-RR nodes.
+
+
+The command output shows that the peer relationships between the node and other
+nodes are interrupted and only the peer relationship between the node and the RR node
+is retained.
+⚫ Question: What are the advantages of establishing BGP peering only between nonRR nodes and RR nodes?
+⚫ Answer: This mode greatly reduces the number of peer entries and the performance
+loss caused by peer maintenance.
+
+
+
+
