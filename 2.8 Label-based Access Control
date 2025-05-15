@@ -1,0 +1,107 @@
+Step 1 Add two pods.
+[root@k8smaster1 network]# kubectl run nginx3 --image=nginx:1.15-alpine -n test1
+[root@k8smaster1 network]# kubectl run nginx4 --image=nginx:1.15-alpine -n test2
+View their IP addresses.
+[root@k8smaster1 network]# kubectl get pods -o wide -n test1
+
+
+[root@k8smaster1 network]# kubectl get pods -o wide -n test2
+
+
+
+
+Step 2 Add a label to a pod.
+Add a label to the nginx1 pod.
+[root@k8smaster1 network]# kubectl label pod nginx1 app=nginx1 -n test1
+
+
+Step 3 Configure an allowlist.
+Create a network policy that matches the nginx1 label, and add the network segment
+setting at the ingress to allow access from the 10.0.0.0 network segment but deny access
+from nginx2. The IP address in except must be changed to the queried IP address. Do
+not directly copy the example configuration.
+[root@k8smaster1 network]# cat > netpolicy2.yaml<<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+ name: netpolicy2
+spec:
+ podSelector:
+ matchLabels:
+ app: nginx1
+ policyTypes:
+ - Ingress
+ - Egress
+ ingress:
+ - from:
+ - ipBlock:
+ cidr: 10.0.0.0/8
+ except:
+ - 10.4.185.2/32
+EOF
+kubectl apply -f netpolicy2.yaml -n test1
+
+
+Step 4 Verify the allowed IP address range at the ingress.
+nginx4 can ping nginx1.
+[root@k8smaster1 network]# kubectl exec -it nginx4 -n test2 -- ping -c 2 10.76.185.196
+
+Step 5 Verify the denied IP address at the ingress.
+nginx2 cannot ping nginx1.
+[root@k8smaster1 network]# kubectl exec -it nginx2 -n test2 -- ping -c 2 10.76.185.196
+
+Step 6 Verify the label.
+nginx2 can ping nginx3. Only nginx1 has the app=nginx1 label, and nginx3 does not
+have this label.
+[root@k8smaster1 network]# kubectl exec -it nginx2 -n test2 -- ping -c 2 10.4.185.3
+
+
+
+⚫ Question: Can nginx1 ping nginx2? Why?
+⚫ Answer: No, it cannot because the egress policy is enabled for the network policy but
+no allowlist is configured.
+Step 7 Modify the policy.
+Modify the content in bold and delete the original ipBlock field from the
+netpolicy2.yaml file, so that only pods with the access_nginx1=true label in the same
+namespace can be accessed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+ name: netpolicy2
+spec:
+ podSelector:
+ matchLabels:
+ app: nginx1
+ policyTypes:
+ - Ingress
+ - Egress
+ ingress:
+ - from:
+ - podSelector:
+ matchLabels:
+ access_nginx1: "true"
+
+
+
+Redeploy the netpolicy2 policy.
+kubectl apply -f netpolicy2.yaml -n test1
+
+Step 8 Verify the label.
+nginx3 cannot ping nginx1.
+[root@k8smaster1 network]# kubectl exec -it nginx3 -n test1 -- ping -c 2 10.76.185.196
+
+Add a label to nginx3.
+[root@k8smaster1 network]# kubectl label pod nginx3 access_nginx1=true -n test1
+nginx3 can ping nginx1.
+[root@k8smaster1 network]# kubectl exec -it nginx3 -n test1 -- ping -c 2 10.76.185.196
+
+
+Step 9 Clear the lab environment.
+Delete the network policy and pods.
+[root@k8smaster1 network]# kubectl delete -f netpolicy2.yaml -n test1
+[root@k8smaster1 network]# kubectl delete pods nginx1 -n test1
+[root@k8smaster1 network]# kubectl delete pods nginx2 -n test2
+[root@k8smaster1 network]# kubectl delete pods nginx3 -n test1
+[root@k8smaster1 network]# kubectl delete pods nginx4 -n test2
+
+
