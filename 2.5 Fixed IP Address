@@ -1,0 +1,26 @@
+Step 1 Deploy a pod with a fixed IP address.
+Deploy a pod with an idle fixed IP address. Example:
+root@k8smaster1 network]# cat > fixed-ip-pod.yaml <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+ name: fixed-ip-pod
+annotations:
+ cni.projectcalico.org/ipAddrs : "[\"11.1.1.11\"]"
+spec:
+ containers:
+ - name: fixed-ip-pod
+ image: busybox
+ imagePullPolicy: IfNotPresent
+ command: ["sleep", "3600"]
+EOF
+kubectl apply -f fixed-ip-pod.yaml
+
+Step 2 View the result.
+kubectl get pods -o wide
+
+
+Delete the test pod and IP address pool.
+[root@k8smaster1 network]# kubectl delete -f fixed-ip-pod.yaml
+[root@k8smaster1 network]# kubectl delete -f ippool-pod.yaml
+
