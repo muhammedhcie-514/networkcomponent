@@ -1,0 +1,75 @@
+Step 1 Create test namespaces.
+Run the following commands on the k8smaster1 node to create two namespaces:
+[root@k8smaster1 network]# kubectl create ns test1
+[root@k8smaster1 network]# kubectl create ns test2
+Step 2 Create two pods.
+[root@k8smaster1 network]# kubectl run nginx1 --image=nginx:1.15-alpine -n test1
+[root@k8smaster1 network]# kubectl run nginx2 --image=nginx:1.15-alpine -n test2
+View the IP addresses of the pods.
+[root@k8smaster1 network]# kubectl get pods -o wide -n test1
+
+
+[root@k8smaster1 network]# kubectl get pods -o wide -n test2
+
+
+Step 3 Connect the network of pods in different namespaces.
+Test the pod network connectivity. Change the command based on the IP addresses
+queried in the previous step. Use the actual IP address in the ping command in
+subsequent operations of this lab. Do not directly copy the example command. Example:
+[root@k8smaster1 network]# kubectl exec -it nginx1 -n test1 -- ping -c 2 10.4.185.2
+[root@k8smaster1 network]# kubectl exec -it nginx2 -n test2 -- ping -c 2 10.76.185.196
+
+
+Step 4 Create a network policy that denies incoming traffic.
+root@k8smaster1 network]# cat > netpolicy1.yaml <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+ name: netpolicy1
+spec:
+ podSelector: {}
+ policyTypes:
+ - Ingress
+EOF
+kubectl apply -f netpolicy1.yaml -n test1
+View the network policy.
+[root@k8smaster1 network]# kubectl get netpol -n test1
+
+
+Step 5 Verify that outgoing traffic is allowed.
+Verify that the test1 pod can ping the test2 pod. For test1, outgoing traffic is allowed.
+[root@k8smaster1 network]# kubectl exec -it nginx1 -n test1 -- ping -c 2 10.4.185.2
+
+
+
+Step 6 Verify that incoming traffic is denied.
+Verify that the test2 pod cannot ping the test1 pod. For test1, incoming traffic is denied.
+[root@k8smaster1 network]# kubectl exec -it nginx2 -n test2 -- ping -c 2 10.76.185.196
+
+Step 7 Create a network policy that denies outgoing traffic.
+Add the egress restriction to the netpolicy1.yaml file.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+ name: netpolicy 1
+spec:
+ podSelector: {}
+ policyTypes:
+ - Ingress
+ - Egress
+Redeploy the policy.
+[root@k8smaster1 network]# kubectl apply -f netpolicy1.yaml -n test1
+
+
+
+Step 8 Verify that outgoing traffic is denied.
+[root@k8smaster1 network]# kubectl exec -it nginx1 -n test1 -- ping -c 2 10.4.185.2
+
+Step 9 Delete the network policy.
+Delete the network policy. Otherwise, the subsequent tasks will be affected.
+[root@k8smaster1 network]# kubectl delete -f netpolicy1.yaml -n test1
+
+
+
+
+
