@@ -1,0 +1,122 @@
+Step 1 View kind.
+[root@k8smaster1 ~]# kubectl api-resources -o wide|grep calico|grep IPPool
+The crd.projectcalico.org/v1 queried can be used to create an IP address pool using
+kubectl.
+
+
+Step 2 Create a working directory.
+[root@k8smaster1 ~]# mkdir /root/network
+[root@k8smaster1 ~]# cd /root/network
+[root@k8smaster1 network]#
+
+
+Step 3 Use calicoctl to create an IP address pool for a pod.
+Note that the network segment cannot conflict with the existing pod network segment.
+The YAML file is as follows:
+cat > pool1.yaml <<EOF
+apiVersion: projectcalico.org/v3
+kind: IPPool
+metadata:
+ name: pool1
+spec:
+ cidr: 11.0.0.0/8
+ ipipMode: Always
+ natOutgoing: true
+ nodeSelector: all()
+EOF
+calicoctl create -f pool1.yaml
+
+
+Step 4 Use kubectl to create an IP address pool for a pod.
+The YAML file is as follows. The value of aipVersion must be the same as that of kind.
+cat > pool2.yaml <<EOF
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+ name: pool2
+spec:
+ cidr: 12.0.0.0/8
+ ipipMode: Always
+ natOutgoing: true
+ nodeSelector: all()
+EOF
+kubectl create -f pool2.yaml
+
+Step 5 View the created IP address pools.
+[root@k8smaster1 network]# calicoctl get ippool
+Check the IP address usage of the IP address pools.
+[root@k8smaster1 network]# calicoctl ipam show
+
+
+Step 6 Create Deployments for specified IP address pools.
+Create two Deployments that use IP address pools pool1 and pool2, respectively.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ creationTimestamp: null
+ labels:
+ app: busybox
+ name: busybox-11
+spec:
+ replicas: 2
+ selector:
+ matchLabels:
+ app: busybox
+ strategy:
+ rollingUpdate:
+ maxSurge: 1
+ maxUnavailable: 1
+ template:
+ metadata:
+ labels:
+ app: busybox
+ annotations:
+ cni.projectcalico.org/ipv4pools : "[\"pool1\"]"
+ spec:
+ containers:
+ - image: busybox:latest
+ name: busybox
+command: ["sleep","99d"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ creationTimestamp: null
+ labels:
+ app: busybox
+ name: busybox-12
+spec:
+ replicas: 2
+ selector:
+ matchLabels:
+ app: busybox
+ strategy:
+ rollingUpdate:
+ maxSurge: 1
+ maxUnavailable: 1
+ template:
+ metadata:
+ labels:
+ app: busybox
+ annotations:
+ cni.projectcalico.org/ipv4pools : "[\"pool2\"]"
+ spec:
+ containers:
+ - image: busybox:latest
+ name: busybox
+ command: ["sleep","99d"]
+
+
+Verify that the Deployments belong to different IP address pools.
+
+
+Step 7 Test network connectivity.
+Log in to a pod and ping pods in other network segments.
+
+ip addr
+
+Step 8 View the current routes.
+In the current mode, tun10 is used as the next-hop interface to other network segments.
+
+
+
