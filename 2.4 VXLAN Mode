@@ -1,0 +1,30 @@
+Step 1 Change modes.
+Run the following command to change the network modes of pool1 and pool2. Change
+the value of ipipMode to Never and that of vxlanMode to Always. Manually add the
+vxlanMode field of pool2.
+[root@k8smaster1 network]# kubectl edit ippool
+
+Step 2 View NIC information.
+Run the following command and view the NIC information:
+[root@k8smaster1 network]# ip add
+The vxlan.calico information is generated in the NIC.
+
+Step 3 View route information.
+Run the following command and verify that the egress of the pool1 and pool2 network
+segments is vxlan.calico:
+[root@k8smaster1 network]# route -n
+
+Step 4 Test network connectivity.
+view pods
+kubectl get pods -o wide
+
+
+Log in to a pod and ping pods in different network segments of different nodes.
+kbectl exec -it ippoll-podi sh
+
+Delete the test pods.
+[root@k8smaster1 network]# calicoctl delete -f pool1.yaml
+[root@k8smaster1 network]# kubectl delete -f pool2.yaml
+
+
+
